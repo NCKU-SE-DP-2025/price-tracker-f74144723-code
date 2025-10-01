@@ -22,48 +22,49 @@
     </div>
 </template>
 
-<script>
-import Categories from '@/constants/categories';
+<script setup>
+import { computed, defineProps } from 'vue'
+import Categories from '@/constants/categories'
 
-export default {
-    props: {
-        category: {
-            type: String,
-            required: true
-        },
-        priceData: {
-            type: Array,
-            required: true
-        },
-        isLoading: {
-            type: Boolean,
-            required: true
-        },
-        errorMessage: {
-            type: String,
-            required: false
-        },
-    },
-    computed: {
-        categoryName() {
-            return Categories[this.category];
-        },
-        latestDataTime(){
-            let timeTmp = this.priceData[0].時間終點.split('-');
-            return timeTmp[0] + '.' + timeTmp[1];
-        }
-    },
-    methods: {
-        latestPrice(prices_str) {
-            let number = prices_str.split(',').map(Number);
-            let i = number.length - 1;
-            while (i >= 0 && number[i]==0) {
-                i--;
-            }
-            return i==-1 ? "-" : number[i];
-        }
-    }
-};
+// 定義 props
+const props = defineProps({
+  category: {
+    type: String,
+    required: true
+  },
+  priceData: {
+    type: Array,
+    required: true
+  },
+  isLoading: {
+    type: Boolean,
+    required: true
+  },
+  errorMessage: {
+    type: String,
+    required: false
+  },
+})
+
+// computed 屬性
+const categoryName = computed(() => Categories[props.category])
+
+const latestDataTime = computed(() => {
+  if (!props.priceData.length) return ''
+  const timeTmp = props.priceData[0].時間終點.split('-')
+  return `${timeTmp[0]}.${timeTmp[1]}`
+})
+
+// methods 改成 function
+function latestPrice(prices_str) {
+  const number = prices_str.split(',').map(Number)
+  let i = number.length - 1
+  while (i >= 0 && number[i] === 0) {
+    i--
+  }
+  return i === -1 ? '-' : number[i]
+}
+
 </script>
 
 <style scoped>

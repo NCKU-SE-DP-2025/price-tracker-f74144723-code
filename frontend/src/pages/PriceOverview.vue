@@ -10,48 +10,47 @@
 </template>
 
 <script>
-import CategoryPrice from '@/components/CategoryPrice.vue';
-import Categories from '@/constants/categories';
-import { usePricesStore } from '@/stores/prices';
+import { computed, onMounted } from 'vue'
+import CategoryPrice from '@/components/CategoryPrice.vue'
+import Categories from '@/constants/categories'
+import { usePricesStore } from '@/stores/prices'
 
 export default {
-    name: 'PriceOverview',
-    data() {
-        return {
-            prices: {},
-        };
-    },
-    components: {
-        CategoryPrice
-    },
-    computed: {
-        categoryList() {
-            return Object.keys(Categories);
-        },
-        isLoading(){
-            const store = usePricesStore();
-            return store.isLoading;
-        },
-        errorMessage(){
-            const store = usePricesStore();
-            return store.errorMessage;
-        },
-        updateTime(){
-            const store = usePricesStore();
-            return store.updatedTime;
-        }
-    },
-    methods:{
-        getPriceData(category){
-            const store = usePricesStore();
-            return store.getPricesByCategory(category);
-        }    
-    },
-    created() {
-        const store = usePricesStore();
-        store.fetchPrices();
+  name: 'PriceOverview',
+  components: {
+    CategoryPrice
+  },
+  setup() {
+    const store = usePricesStore()
+
+    // category list
+    const categoryList = computed(() => Object.keys(Categories))
+
+    // 來自 store 的狀態
+    const isLoading = computed(() => store.isLoading)
+    const errorMessage = computed(() => store.errorMessage)
+    const updateTime = computed(() => store.updatedTime)
+
+    // 方法
+    function getPriceData(category) {
+      return store.getPricesByCategory(category)
     }
-};
+
+    // 初始化載入
+    onMounted(() => {
+      store.fetchPrices()
+    })
+
+    return {
+      categoryList,
+      isLoading,
+      errorMessage,
+      updateTime,
+      getPriceData
+    }
+  }
+}
+
 </script>
 
 <style scoped>

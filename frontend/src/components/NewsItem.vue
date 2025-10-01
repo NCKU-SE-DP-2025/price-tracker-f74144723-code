@@ -23,42 +23,55 @@
     </div>
 </template>
 
-<script>
-import { useAuthStore } from '@/stores/auth';
-import { useNewsStore } from '@/stores/news';
-export default {
-    props: {
-        news: {
-            type: Object,
-            required: true
-        }
-    },
-    computed: {
-        hasDetails() {
-            return this.news.reason && this.news.summary;
-        },
-        shortContent() {
-            return this.news.content.length > 200 ? this.news.content.substr(0, 200) + '...' : this.news.content;
-        },
-        isLoggedIn(){
-            const userStore = useAuthStore();
-            return userStore.isLoggedIn;
-        }
-    },
-    methods:{
-        showDialog(){
-            this.$emit('show-dialog');
-        },
-        fetchSummary(){
-            if(this.isLoading) return;
-            this.isLoading = true;
-            this.$emit('fetch-summary');
-        },
-        toggleUpvote(newsId){
-            useNewsStore().toggleUpvote(newsId);
-        }
-    }
-};
+<script setup>
+import { computed, ref, defineProps, defineEmits } from 'vue'
+import { useAuthStore } from '@/stores/auth'
+import { useNewsStore } from '@/stores/news'
+
+// props
+const props = defineProps({
+  news: {
+    type: Object,
+    required: true
+  }
+})
+
+// emit
+const emit = defineEmits(['show-dialog', 'fetch-summary'])
+
+// stores
+const userStore = useAuthStore()
+const newsStore = useNewsStore()
+
+// local state
+const isLoading = ref(false)
+
+// computed
+const hasDetails = computed(() => props.news.reason && props.news.summary)
+
+const shortContent = computed(() => 
+  props.news.content.length > 200 
+    ? props.news.content.substr(0, 200) + '...' 
+    : props.news.content
+)
+
+const isLoggedIn = computed(() => userStore.isLoggedIn)
+
+// methods
+function showDialog() {
+  emit('show-dialog')
+}
+
+function fetchSummary() {
+  if (isLoading.value) return
+  isLoading.value = true
+  emit('fetch-summary')
+}
+
+function toggleUpvote(newsId) {
+  newsStore.toggleUpvote(newsId)
+}
+
 </script>
 
 <style scoped>
