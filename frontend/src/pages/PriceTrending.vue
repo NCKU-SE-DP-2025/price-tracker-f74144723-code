@@ -23,55 +23,66 @@
 </template>
 
 <script>
-import { usePricesStore } from '@/stores/prices';
-import Categories from '@/constants/categories';
-import TrendingTable from '@/components/TrendingTable.vue';
-import TrendingChart from '@/components/TrendingChart.vue';
+import { ref, computed, watch, onMounted } from 'vue'
+import { usePricesStore } from '@/stores/prices'
+import Categories from '@/constants/categories'
+import TrendingTable from '@/components/TrendingTable.vue'
+import TrendingChart from '@/components/TrendingChart.vue'
 
 export default {
-    components: {
-        TrendingTable,
-        TrendingChart
-    },
-    data() {
-        return {
-            selectedCategory: '',
-            selectedProduct: '',
-            productList: [],
-        };
-    },
-    computed: {
-        store() {
-            return usePricesStore();
-        },
-        categoryKeys() {
-            return Object.keys(Categories);
-        },
-        products() {
-            return this.selectedCategory ? this.store.getPricesByCategory(this.selectedCategory) : [];
-        },
-    },
-    methods: {
-        categoryName(category) {
-            return Categories[category];
-        }
-    },
-    watch: {
-        selectedCategory() {
-            this.selectedProduct = '';
-            const store = usePricesStore();
-            this.productList = store.getProductList(this.selectedCategory);
-            this.productData = null;
-        },
-        selectedProduct() {
-            console.log(this.selectedProduct);
-        }
-    },
-    created() {
-        const store = usePricesStore();
-        store.fetchPrices();
+  components: {
+    TrendingTable,
+    TrendingChart
+  },
+  setup() {
+    const store = usePricesStore()
+
+    const selectedCategory = ref('')
+    const selectedProduct = ref('')
+    const productList = ref([])
+    const productData = ref(null) // 原本在 watch 內有用到
+
+    // 類別清單
+    const categoryKeys = computed(() => Object.keys(Categories))
+
+    // 產品列表（來自 store）
+    const products = computed(() =>
+      selectedCategory.value ? store.getPricesByCategory(selectedCategory.value) : []
+    )
+
+    // 類別名稱
+    const categoryName = category => Categories[category]
+
+    // 監聽類別變化
+    watch(selectedCategory, (newCategory) => {
+      selectedProduct.value = ''
+      productList.value = store.getProductList(newCategory)
+      productData.value = null
+    })
+
+    // 監聽產品變化
+    watch(selectedProduct, (newProduct) => {
+      console.log(newProduct)
+    })
+
+    // 初始化載入
+    onMounted(() => {
+      store.fetchPrices()
+    })
+
+    return {
+      store,
+      selectedCategory,
+      selectedProduct,
+      productList,
+      productData,
+      categoryKeys,
+      products,
+      categoryName
     }
-};
+  }
+}
+
 </script>
 
 

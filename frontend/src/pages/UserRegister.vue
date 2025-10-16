@@ -21,48 +21,62 @@
 </template>
 
 <script>
-import { useAuthStore } from '@/stores/auth';
+import { ref, reactive } from 'vue'
+import { useAuthStore } from '@/stores/auth'
 
 export default {
-    data() {
-        return {
-            username: '',
-            password: '',
-            passwordConfirm: '',
-            errors: {
-                username: '',
-                password: '',
-                passwordConfirm: ''
-            }
-        };
-    },
-    methods: {
-        register() {
-            if (this.validate()) {
-                const userStore = useAuthStore();
-                userStore.register(this.username, this.password);
-            }
-        },
-        validate() {
-            let valid = true;
-            this.errors = { username: '', password: '', passwordConfirm: '' };
+  setup() {
+    const userStore = useAuthStore()
 
-            if (!this.username.trim()) {
-                this.errors.username = 'Username is required.';
-                valid = false;
-            }
-            if (!this.password) {
-                this.errors.password = 'Password is required.';
-                valid = false;
-            }
-            if (this.password !== this.passwordConfirm) {
-                this.errors.passwordConfirm = 'Passwords do not match!';
-                valid = false;
-            }
-            return valid;
-        }
+    // local state
+    const username = ref('')
+    const password = ref('')
+    const passwordConfirm = ref('')
+    const errors = reactive({
+      username: '',
+      password: '',
+      passwordConfirm: ''
+    })
+
+    // methods
+    function validate() {
+      let valid = true
+      errors.username = ''
+      errors.password = ''
+      errors.passwordConfirm = ''
+
+      if (!username.value.trim()) {
+        errors.username = 'Username is required.'
+        valid = false
+      }
+      if (!password.value) {
+        errors.password = 'Password is required.'
+        valid = false
+      }
+      if (password.value !== passwordConfirm.value) {
+        errors.passwordConfirm = 'Passwords do not match!'
+        valid = false
+      }
+      return valid
     }
+
+    function register() {
+      if (validate()) {
+        userStore.register(username.value, password.value)
+      }
+    }
+
+    return {
+      username,
+      password,
+      passwordConfirm,
+      errors,
+      register,
+      validate
+    }
+  }
 }
+
 </script>
 
 <style scoped>
