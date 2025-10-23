@@ -146,7 +146,7 @@ def add_new(news_data):
     session.close()
 
 
-def get_new_info(search_term, is_initial=False):
+def fetch_news_metadata(search_term, is_initial=False):
     """
     get new
 
@@ -182,14 +182,14 @@ def get_new_info(search_term, is_initial=False):
         all_news_data = response.json()["lists"]
     return all_news_data
 
-def get_new(is_initial=False):
+def fetch_news_from_udn(is_initial=False):
     """
     get new info
 
     :param is_initial:
     :return:
     """
-    news_data = get_new_info("價格", is_initial=is_initial)
+    news_data = fetch_news_metadata("價格", is_initial=is_initial)
     for news in news_data:
         title = news["title"]
         m = [
@@ -248,9 +248,9 @@ def start_scheduler():
     db = SessionLocal()
     if db.query(NewsArticle).count() == 0:
         # should change into simple factory pattern
-        get_new()
+        fetch_news_from_udn()
     db.close()
-    bgs.add_job(get_new, "interval", minutes=100)
+    bgs.add_job(fetch_news_from_udn, "interval", minutes=100)
     bgs.start()
 
 
@@ -272,15 +272,15 @@ def session_opener():
 
 
 
-def verify(p1, p2):
-    return pwd_context.verify(p1, p2)
+def verify_password(plain, hashed):
+    return pwd_context.verify(plain, hashed)
 
 
 def check_user_password_is_correct(db, n, pwd):
-    OuO = db.query(User).filter(User.username == n).first()
-    if not verify(pwd, OuO.hashed_password):
+    user_record = db.query(User).filter(User.username == n).first()
+    if not verify_password(pwd, user_record.hashed_password):
         return False
-    return OuO
+    return user_record
 
 
 def authenticate_user_token(
@@ -309,7 +309,9 @@ async def login_for_access_token(
         form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(session_opener)
 ):
     """login"""
+    # 函式會回傳使用者物件（如果帳號密碼正確），或是 False / None（如果錯誤）
     user = check_user_password_is_correct(db, form_data.username, form_data.password)
+    # 若帳號密碼驗證成功，建立 JWT access token
     access_token = create_access_token(
         data={"sub": str(user.username)}, expires_delta=timedelta(minutes=30)
     )
@@ -420,7 +422,7 @@ async def search_news(request: PromptRequest):
     )
     keywords = completion.choices[0].message.content
     # should change into simple factory pattern
-    news_items = get_new_info(keywords, is_initial=False)
+    news_items = fetch_news_metadata(keywords, is_initial=False)
     for news in news_items:
         try:
             response = requests.get(news["titleLink"])
@@ -487,33 +489,33 @@ def upvote_article(
     return {"message": message}
 
 
-def toggle_upvote(n_id, u_id, db):
+def toggle_upvote(article_id, user_id, db):
     existing_upvote = db.execute(
         select(user_news_association_table).where(
-            user_news_association_table.c.news_articles_id == n_id,
-            user_news_association_table.c.user_id == u_id,
+            user_news_association_table.c.news_articles_id == article_id,
+            user_news_association_table.c.user_id == user_id,
         )
     ).scalar()
 
     if existing_upvote:
         delete_stmt = delete(user_news_association_table).where(
-            user_news_association_table.c.news_articles_id == n_id,
-            user_news_association_table.c.user_id == u_id,
+            user_news_association_table.c.news_articles_id == article_id,
+            user_news_association_table.c.user_id == user_id,
         )
         db.execute(delete_stmt)
         db.commit()
         return "Upvote removed"
     else:
         insert_stmt = insert(user_news_association_table).values(
-            news_articles_id=n_id, user_id=u_id
+            news_articles_id=article_id, user_id=user_id
         )
         db.execute(insert_stmt)
         db.commit()
         return "Article upvoted"
 
 
-def news_exists(id2, db: Session):
-    return db.query(NewsArticle).filter_by(id=id2).first() is not None
+def news_exists(news_id, db: Session):
+    return db.query(NewsArticle).filter_by(id=news_id).first() is not None
 
 
 @app.get("/api/v1/prices/necessities-price")
