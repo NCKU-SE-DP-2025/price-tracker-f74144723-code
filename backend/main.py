@@ -74,7 +74,7 @@ sentry_sdk.init(
 )
 
 app = FastAPI()
-bgs = BackgroundScheduler()
+background_scheduler = BackgroundScheduler()
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 app.add_middleware(
@@ -171,7 +171,7 @@ def fetch_news_metadata(search_term, is_initial=False):
         for l in a:
             all_news_data.append(l)
     else:
-        p = {
+        query_param = {
             "page": 1,
             "id": f"search:{quote(search_term)}",
             "channelId": 2,
@@ -224,7 +224,7 @@ def fetch_news_from_udn(is_initial=False):
                 "time": time,
                 "content": paragraphs,
             }
-            m = [
+            prompt_message = [
                 {
                     "role": "system",
                     "content": "你是一個新聞摘要生成機器人，請統整新聞中提及的影響及主要原因 (影響、原因各50個字，請以json格式回答 {'影響': '...', '原因': '...'})",
@@ -250,13 +250,13 @@ def start_scheduler():
         # should change into simple factory pattern
         fetch_news_from_udn()
     db.close()
-    bgs.add_job(fetch_news_from_udn, "interval", minutes=100)
-    bgs.start()
+    background_scheduler.add_job(fetch_news_from_udn, "interval", minutes=100)
+    background_scheduler.start()
 
 
 @app.on_event("shutdown")
 def shutdown_scheduler():
-    bgs.shutdown()
+    background_scheduler.shutdown()
 
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -332,7 +332,7 @@ def create_user(user: UserAuthSchema, db: Session = Depends(session_opener)):
 
 
 @app.get("/api/v1/users/me")
-def read_users_me(user=Depends(authenticate_user_token)):
+def get_users_me(user=Depends(authenticate_user_token)):
     return {"username": user.username}
 
 
@@ -357,7 +357,7 @@ def get_article_upvote_details(article_id, uid, db):
 
 
 @app.get("/api/v1/news/news")
-def read_news(db=Depends(session_opener)):
+def get_news(db=Depends(session_opener)):
     """
     read new
 
@@ -377,9 +377,9 @@ def read_news(db=Depends(session_opener)):
 @app.get(
     "/api/v1/news/user_news"
 )
-def read_user_news(
+def get_user_news(
         db=Depends(session_opener),
-        u=Depends(authenticate_user_token)
+        current_user=Depends(authenticate_user_token)
 ):
     """
     read user new
@@ -451,12 +451,12 @@ async def search_news(request: PromptRequest):
             print(e)
     return sorted(news_list, key=lambda x: x["time"], reverse=True)
 
-class NewsSumaryRequestSchema(BaseModel):
+class NewsSummaryRequestSchema(BaseModel):
     content: str
 
 @app.post("/api/v1/news/news_summary")
 async def news_summary(
-        payload: NewsSumaryRequestSchema, u=Depends(authenticate_user_token)
+        payload: NewsSummaryRequestSchema, u=Depends(authenticate_user_token)
 ):
     response = {}
     m = [
@@ -485,11 +485,11 @@ def upvote_article(
         db=Depends(session_opener),
         u=Depends(authenticate_user_token),
 ):
-    message = toggle_upvote(id, u.id, db)
+    message = toggle_article_upvote(id, u.id, db)
     return {"message": message}
 
 
-def toggle_upvote(article_id, user_id, db):
+def toggle_article_upvote(article_id, user_id, db):
     existing_upvote = db.execute(
         select(user_news_association_table).where(
             user_news_association_table.c.news_articles_id == article_id,
