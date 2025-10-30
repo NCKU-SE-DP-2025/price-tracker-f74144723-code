@@ -74,7 +74,7 @@ sentry_sdk.init(
 )
 
 app = FastAPI()
-bgs = BackgroundScheduler()
+background_scheduler = BackgroundScheduler()
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 app.add_middleware(
@@ -146,7 +146,7 @@ def add_new(news_data):
     session.close()
 
 
-def get_new_info(search_term, is_initial=False):
+def fetch_news_metadata(search_term, is_initial=False):
     """
     get new
 
@@ -171,7 +171,7 @@ def get_new_info(search_term, is_initial=False):
         for l in a:
             all_news_data.append(l)
     else:
-        p = {
+        query_param = {
             "page": 1,
             "id": f"search:{quote(search_term)}",
             "channelId": 2,
@@ -182,14 +182,14 @@ def get_new_info(search_term, is_initial=False):
         all_news_data = response.json()["lists"]
     return all_news_data
 
-def get_new(is_initial=False):
+def fetch_news_from_udn(is_initial=False):
     """
     get new info
 
     :param is_initial:
     :return:
     """
-    news_data = get_new_info("價格", is_initial=is_initial)
+    news_data = fetch_news_metadata("價格", is_initial=is_initial)
     for news in news_data:
         title = news["title"]
         m = [
@@ -224,7 +224,7 @@ def get_new(is_initial=False):
                 "time": time,
                 "content": paragraphs,
             }
-            m = [
+            prompt_message = [
                 {
                     "role": "system",
                     "content": "你是一個新聞摘要生成機器人，請統整新聞中提及的影響及主要原因 (影響、原因各50個字，請以json格式回答 {'影響': '...', '原因': '...'})",
@@ -248,15 +248,15 @@ def start_scheduler():
     db = SessionLocal()
     if db.query(NewsArticle).count() == 0:
         # should change into simple factory pattern
-        get_new()
+        fetch_news_from_udn()
     db.close()
-    bgs.add_job(get_new, "interval", minutes=100)
-    bgs.start()
+    background_scheduler.add_job(fetch_news_from_udn, "interval", minutes=100)
+    background_scheduler.start()
 
 
 @app.on_event("shutdown")
 def shutdown_scheduler():
-    bgs.shutdown()
+    background_scheduler.shutdown()
 
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -272,15 +272,15 @@ def session_opener():
 
 
 
-def verify(p1, p2):
-    return pwd_context.verify(p1, p2)
+def verify_password(plain, hashed):
+    return pwd_context.verify(plain, hashed)
 
 
 def check_user_password_is_correct(db, n, pwd):
-    OuO = db.query(User).filter(User.username == n).first()
-    if not verify(pwd, OuO.hashed_password):
+    user_record = db.query(User).filter(User.username == n).first()
+    if not verify_password(pwd, user_record.hashed_password):
         return False
-    return OuO
+    return user_record
 
 
 def authenticate_user_token(
@@ -309,7 +309,9 @@ async def login_for_access_token(
         form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(session_opener)
 ):
     """login"""
+    # 函式會回傳使用者物件（如果帳號密碼正確），或是 False / None（如果錯誤）
     user = check_user_password_is_correct(db, form_data.username, form_data.password)
+    # 若帳號密碼驗證成功，建立 JWT access token
     access_token = create_access_token(
         data={"sub": str(user.username)}, expires_delta=timedelta(minutes=30)
     )
@@ -330,7 +332,7 @@ def create_user(user: UserAuthSchema, db: Session = Depends(session_opener)):
 
 
 @app.get("/api/v1/users/me")
-def read_users_me(user=Depends(authenticate_user_token)):
+def get_users_me(user=Depends(authenticate_user_token)):
     return {"username": user.username}
 
 
@@ -355,7 +357,7 @@ def get_article_upvote_details(article_id, uid, db):
 
 
 @app.get("/api/v1/news/news")
-def read_news(db=Depends(session_opener)):
+def get_news(db=Depends(session_opener)):
     """
     read new
 
@@ -375,9 +377,9 @@ def read_news(db=Depends(session_opener)):
 @app.get(
     "/api/v1/news/user_news"
 )
-def read_user_news(
+def get_user_news(
         db=Depends(session_opener),
-        u=Depends(authenticate_user_token)
+        current_user=Depends(authenticate_user_token)
 ):
     """
     read user new
@@ -420,7 +422,7 @@ async def search_news(request: PromptRequest):
     )
     keywords = completion.choices[0].message.content
     # should change into simple factory pattern
-    news_items = get_new_info(keywords, is_initial=False)
+    news_items = fetch_news_metadata(keywords, is_initial=False)
     for news in news_items:
         try:
             response = requests.get(news["titleLink"])
@@ -449,12 +451,12 @@ async def search_news(request: PromptRequest):
             print(e)
     return sorted(news_list, key=lambda x: x["time"], reverse=True)
 
-class NewsSumaryRequestSchema(BaseModel):
+class NewsSummaryRequestSchema(BaseModel):
     content: str
 
 @app.post("/api/v1/news/news_summary")
 async def news_summary(
-        payload: NewsSumaryRequestSchema, u=Depends(authenticate_user_token)
+        payload: NewsSummaryRequestSchema, u=Depends(authenticate_user_token)
 ):
     response = {}
     m = [
@@ -483,37 +485,37 @@ def upvote_article(
         db=Depends(session_opener),
         u=Depends(authenticate_user_token),
 ):
-    message = toggle_upvote(id, u.id, db)
+    message = toggle_article_upvote(id, u.id, db)
     return {"message": message}
 
 
-def toggle_upvote(n_id, u_id, db):
+def toggle_article_upvote(article_id, user_id, db):
     existing_upvote = db.execute(
         select(user_news_association_table).where(
-            user_news_association_table.c.news_articles_id == n_id,
-            user_news_association_table.c.user_id == u_id,
+            user_news_association_table.c.news_articles_id == article_id,
+            user_news_association_table.c.user_id == user_id,
         )
     ).scalar()
 
     if existing_upvote:
         delete_stmt = delete(user_news_association_table).where(
-            user_news_association_table.c.news_articles_id == n_id,
-            user_news_association_table.c.user_id == u_id,
+            user_news_association_table.c.news_articles_id == article_id,
+            user_news_association_table.c.user_id == user_id,
         )
         db.execute(delete_stmt)
         db.commit()
         return "Upvote removed"
     else:
         insert_stmt = insert(user_news_association_table).values(
-            news_articles_id=n_id, user_id=u_id
+            news_articles_id=article_id, user_id=user_id
         )
         db.execute(insert_stmt)
         db.commit()
         return "Article upvoted"
 
 
-def news_exists(id2, db: Session):
-    return db.query(NewsArticle).filter_by(id=id2).first() is not None
+def news_exists(news_id, db: Session):
+    return db.query(NewsArticle).filter_by(id=news_id).first() is not None
 
 
 @app.get("/api/v1/prices/necessities-price")
