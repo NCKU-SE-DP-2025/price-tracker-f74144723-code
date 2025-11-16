@@ -57,6 +57,7 @@ def test_token(test_user):
 @pytest.fixture(scope="module")
 def test_articles():
     with next(override_session_opener()) as db:
+        db.query(NewsArticle).delete()
         article_1 = NewsArticle(
             url="https://example.com/test-news-1",
             title="Test News 1",

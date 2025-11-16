@@ -4,13 +4,17 @@ on:
   push:
     branches:
       - 'main'
+      - 'develop'
+      - 'fix/integration-test' # add this line
   pull_request:
     branches:
       - 'main'
+      - 'develop'
+  workflow_dispatch:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: F74144723
 
     steps:
       - name: Checkout code
